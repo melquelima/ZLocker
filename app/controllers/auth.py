@@ -1,9 +1,9 @@
 
-from app import app
+from app import app,lm
 from werkzeug.security import check_password_hash as CPH
-from flask import request,make_response,url_for
+from flask import request,make_response,url_for,redirect,flash,render_template,redirect
 from app.models.DB.user import User,UserSchema
-
+from flask_login import login_user,login_required,current_user,logout_user
 from datetime import timedelta
 from datetime import datetime
 import jwt
@@ -12,6 +12,34 @@ from dateUts import *
 
 from app.models.Decorators.auth import temp_token_required
 from app.models.Decorators.fields import fields_get, fields_notEmpty, fields_required
+from app.models.Forms.login import LoginForm
+from glob import glob
+
+
+@app.route('/create_admin',methods=['POST','GET'])
+def create_admin():
+    if glob('./app/data/done'): return redirect('home')
+    if current_user.is_authenticated: return redirect("home")
+    if User.query.count() >0: return redirect('home')
+
+    form = LoginForm()
+    if form.validate_on_submit():
+        usr = User(username=form.username.data,level="user",is_active=True,is_admin=True)
+        usr.set_password(form.password.data)
+        usr.save()
+        login_user(usr)
+        open('./app/data/done','+w').close()
+        return redirect('home') 
+
+    if form.username.data is None: 
+        form.username.data = 'admin'
+
+    return render_template("create_admin_user.html",form=form,user=current_user)
+
+@lm.user_loader
+def load_user(id):
+    return User.query.filter_by(id=id).first()
+
 
 @app.route('/login')
 def login():
@@ -38,14 +66,6 @@ def login():
         return rsp
     else:
         return "Usuário ou senha invalida!",401
-
-@app.route('/sessionActive/<string:token>')
-def sessionActive(token):
-    try:
-        jwt.decode(token,app.config['SECRET_KEY'])
-        return {"status":True,"message":"token valido!"}
-    except:
-        return {"status":False,"message":"token invalido!"}
 
 
 @app.route('/reset_password',methods=['POST'])
